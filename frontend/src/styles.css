@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------
+   Design system inspiré shadcn/ui (Linear, Vercel, Cal.com)
+   ------------------------------------------------------------------ */
+@layer base {
+  :root {
+    /* ===== Palette GTSR =====
+       Bleu (brand)   : #0F2645 → #EFF4FB (identité, sidebar, headings, secondaires)
+       Orange (action): #F58220                          (CTA principaux)
+       Gris (neutres) : #111827 → #F9FAFB                (texte / surfaces)
+       Statuts        : couleurs sémantiques (success/warning/info/destructive)
+    */
+
+    /* Base — page sur #F9FAFB, surfaces sur #FFFFFF */
+    --background: 210 20% 98%;     /* #F9FAFB */
+    --foreground: 217 64% 16%;     /* #0F2645 — brand-900 */
+
+    /* Surfaces secondaires */
+    --muted: 220 14% 96%;           /* #F3F4F6 */
+    --muted-foreground: 220 9% 46%; /* #6B7280 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 217 64% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 217 64% 16%;
+
+    /* Accent — survol / surfaces interactives subtiles */
+    --accent: 213 56% 93%;          /* brand-100 #DCE7F4 dilué */
+    --accent-foreground: 217 64% 16%;
+
+    /* Primary — ORANGE d'action (#F58220) — boutons principaux */
+    --primary: 25 92% 54%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary — bleu de marque atténué pour boutons secondaires */
+    --secondary: 214 53% 43%;       /* brand-600 #3366A8 */
+    --secondary-foreground: 0 0% 100%;
+
+    /* Destructive */
+    --destructive: 0 74% 50%;       /* #DC2626 */
+    --destructive-foreground: 0 0% 100%;
+
+    /* Bordures et inputs */
+    --border: 220 13% 91%;          /* #E5E7EB */
+    --input: 220 13% 91%;
+    --ring: 25 92% 54%;             /* focus = primary orange */
+
+    /* Sémantiques — alignés sur la maquette */
+    --success: 160 84% 39%;         /* #10B981 */
+    --success-foreground: 0 0% 100%;
+    --success-subtle: 149 80% 90%;  /* #D1FAE5 */
+    --warning: 38 92% 50%;          /* #F59E0B */
+    --warning-foreground: 0 0% 100%;
+    --warning-subtle: 48 96% 89%;   /* #FEF3C7 */
+    --info: 217 91% 60%;            /* #3B82F6 (bleu statut "Ouvert") */
+    --info-foreground: 0 0% 100%;
+    --info-subtle: 213 94% 90%;     /* #DBEAFE */
+
+    /* Border radius global - 12px pour les cards */
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'rlig' 1, 'calt' 1;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { @apply text-[24px] font-semibold text-foreground tracking-tight leading-tight; }
+  h2 { @apply text-[16px] font-semibold text-foreground; }
+  h3 { @apply text-sm font-semibold text-foreground; }
+  table { @apply text-sm; }
+}
+
+/* ------------------------------------------------------------------
+   Composants utilitaires (compat ancienne API)
+   - .btn, .input, .card, .badge restent disponibles pour les pages
+     non encore migrées vers les composants <Button>, <Card>, etc.
+   ------------------------------------------------------------------ */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 h-9
+           rounded-md text-sm font-medium whitespace-nowrap
+           transition-colors focus-visible:outline-none focus-visible:ring-2
+           focus-visible:ring-ring focus-visible:ring-offset-1
+           disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary   { @apply btn bg-primary text-primary-foreground hover:bg-primary/90; }
+  .btn-ghost     { @apply btn border border-border bg-transparent text-foreground hover:bg-accent; }
+  .btn-secondary { @apply btn bg-secondary text-secondary-foreground hover:bg-secondary/80; }
+  .btn-danger    { @apply btn border border-destructive/30 bg-transparent text-destructive hover:bg-destructive/10; }
+  .btn-dark      { @apply btn bg-foreground text-background hover:bg-foreground/90; }
+
+  .input {
+    @apply flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm
+           placeholder:text-muted-foreground focus-visible:outline-none
+           focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:border-ring
+           disabled:cursor-not-allowed disabled:bg-muted;
+  }
+  textarea.input { @apply h-auto py-2; }
+  .label { @apply text-xs font-medium text-foreground mb-1.5 block leading-none; }
+
+  .card { @apply bg-card border border-border rounded-xl overflow-hidden text-card-foreground; }
+  .card-header { @apply px-5 py-4 border-b border-border bg-muted/30; }
+
+  .badge { @apply inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md border; }
+  .tag { @apply inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md bg-muted text-muted-foreground; }
+  .link { @apply text-primary hover:underline underline-offset-2; }
+
+  /* Sidebar */
+  .nav-link {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-muted-foreground transition-colors
+           hover:bg-accent hover:text-foreground;
+  }
+  .nav-link-active { @apply bg-accent text-foreground font-medium; }
+
+  /* Tables */
+  .data-table { @apply w-full text-sm; }
+  .data-table thead { @apply bg-muted/30 border-b border-border; }
+  .data-table th { @apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground; }
+  .data-table td { @apply px-4 py-3 border-b border-border; }
+  .data-table tbody tr:hover { @apply bg-muted/30; }
+
+  /* Stat tile */
+  .stat-tile { @apply card p-5; }
+  .stat-label { @apply text-[11px] font-semibold uppercase tracking-wider text-muted-foreground; }
+  .stat-value { @apply text-[24px] font-semibold text-foreground mt-1.5 tracking-tight; }
+}
+
+/* Scrollbar subtile */
+@layer utilities {
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/40; }
+  ::-webkit-scrollbar-track { background: transparent; }
+}

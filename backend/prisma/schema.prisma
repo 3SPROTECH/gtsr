@@ -1,0 +1,413 @@
+// GTSR - Schema Prisma
+// Conforme au CDC-HELPDESK-2026-001 (sections 5, 6, 7, 8, 9, 10, 13)
+// Design: domain entities modeled as Prisma models. Repositories accèdent via PrismaClient.
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- ENUMS (CDC §5, §6, §7, §8) ----------
+
+enum Role {
+  USER         // Demandeur final
+  TECHNICIAN   // Toute personne du support technique (regroupe N1/N2/N3)
+  ADMIN        // Administrateur (gère la plateforme + supervision)
+}
+
+enum TicketStatus {
+  OPEN          // Ouvert
+  IN_PROGRESS   // En cours
+  DONE          // Terminé
+  CANCELLED     // Annulé
+}
+
+enum TicketType {    // §6.1
+  INCIDENT
+  REQUEST
+  QUESTION
+  EVOLUTION
+}
+
+enum Priority {      // §7.1
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum Grade {         // §7.2
+  G1
+  G2
+  G3
+  G4
+  G5
+}
+
+enum Impact {        // §7.3
+  LOW          // 1 personne
+  MEDIUM       // 1 équipe
+  HIGH         // 1 agence
+  VERY_HIGH    // multi-agences
+}
+
+enum Urgency {       // §7.3
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum CreationChannel { // §6.2
+  WEB
+  MOBILE
+  EMAIL
+  PHONE
+  CHATBOT
+  API
+}
+
+enum NotificationChannel { // §9.1
+  EMAIL
+  IN_APP
+  SMS
+  CHAT
+}
+
+enum Availability {           // Statut de disponibilité (techniciens)
+  AVAILABLE
+  BUSY
+  AWAY
+}
+
+// ---------- MODELS ----------
+
+// §5.2 Agence
+model Agency {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  address         String?
+  timezone        String   @default("Europe/Paris")
+  // Horaires d'ouverture pour SLA en heures ouvrées (CDC §14.1)
+  openingHourStart Int      @default(8)   // 8h
+  openingHourEnd   Int      @default(18)  // 18h
+  workingDays      String   @default("1,2,3,4,5") // lundi=1 ... dimanche=7
+
+  managerId       String?
+  manager         User?    @relation("AgencyManager", fields: [managerId], references: [id])
+
+  users           User[]   @relation("UserAgency")
+  tickets         Ticket[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// §5.1 Utilisateur (tous profils)
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String   // bcrypt
+  firstName     String
+  lastName      String
+  role          Role     @default(USER)
+  isActive      Boolean  @default(true)
+  // Statut de présence affiché aux autres utilisateurs (utile surtout pour TECHNICIAN)
+  availability  Availability @default(AVAILABLE)
+  // Dernière activité authentifiée (mise à jour par le middleware) — sert à calculer la présence "en ligne"
+  lastSeenAt    DateTime?
+  // MFA stub (§13.1) - in real impl, store secret here
+  mfaEnabled    Boolean  @default(false)
+  failedLogins  Int      @default(0)     // §13.1 blocage tentatives
+  lockedUntil   DateTime?
+
+  agencyId      String?
+  agency        Agency?  @relation("UserAgency", fields: [agencyId], references: [id])
+
+  managedAgencies Agency[] @relation("AgencyManager")
+
+  // Relations tickets
+  ticketsCreated   Ticket[]  @relation("TicketRequester")
+  ticketsAssigned  Ticket[]  @relation("TicketAssignee")
+  comments         Comment[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  satisfactionSurveys SatisfactionSurvey[]
+  refreshTokens    RefreshToken[]
+  escalationsFrom  TicketEscalation[] @relation("EscalationFrom")
+  escalationsTo    TicketEscalation[] @relation("EscalationTo")
+  complaints       Complaint[]        @relation("ComplaintTech")
+  interventionReports InterventionReport[] @relation("ReportTech")
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([email])
+  @@index([role])
+}
+
+// §6.3 Catégorie hiérarchique
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  parentId  String?
+  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryHierarchy")
+  tickets   Ticket[]
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// §6.1 Ticket
+model Ticket {
+  id              String       @id @default(cuid())
+  number          String       @unique  // TKT-AAAAMM-NNNNN
+  title           String       @db.VarChar(200)
+  description     String       @db.Text
+  type            TicketType   @default(INCIDENT)
+  status          TicketStatus @default(OPEN)
+  priority        Priority     @default(MEDIUM)
+  grade           Grade        @default(G2)
+  impact          Impact       @default(LOW)
+  urgency         Urgency      @default(MEDIUM)
+  channel         CreationChannel @default(WEB)
+
+  requesterId     String
+  requester       User         @relation("TicketRequester", fields: [requesterId], references: [id])
+
+  assigneeId      String?
+  assignee        User?        @relation("TicketAssignee", fields: [assigneeId], references: [id])
+
+  agencyId        String
+  agency          Agency       @relation(fields: [agencyId], references: [id])
+
+  categoryId      String?
+  category        Category?    @relation(fields: [categoryId], references: [id])
+
+  // SLA (§14) - timestamps clés
+  takenChargeAt   DateTime?    // 1er passage en IN_PROGRESS ou ASSIGNED
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  dueResponseAt   DateTime?    // deadline prise en charge
+  dueResolutionAt DateTime?    // deadline résolution
+  slaBreached     Boolean      @default(false)
+
+  resolutionNote  String?      @db.Text
+
+  // Déclaration du technicien (non engageante - admin doit valider)
+  // null = pas encore déclaré, 'RESOLVED', 'NOT_RESOLVED'
+  techResolution      String?
+  techResolutionNote  String?   @db.Text
+  techResolvedAt      DateTime?
+
+  // Confirmation par l'utilisateur après que le tech ait déclaré RESOLVED
+  // null = pas encore confirmé, 'CONFIRMED', 'REJECTED'
+  userConfirmation     String?
+  userConfirmationNote String?  @db.Text
+  userConfirmedAt      DateTime?
+
+  comments        Comment[]
+  complaints      Complaint[]
+  attachments     Attachment[]
+  escalations     TicketEscalation[]
+  history         TicketHistory[]
+  satisfaction    SatisfactionSurvey?
+  notifications   Notification[]
+  interventionReport InterventionReport?
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([status])
+  @@index([priority])
+  @@index([assigneeId])
+  @@index([requesterId])
+  @@index([agencyId])
+  @@index([createdAt])
+}
+
+// Commentaires / Chat intégré (§10.2)
+model Comment {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  body       String   @db.Text
+  isInternal Boolean  @default(false)  // visible technicien uniquement
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+// Pièces jointes (§6.1)
+model Attachment {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  filename   String
+  mimetype   String
+  size       Int
+  url        String
+  uploadedBy String?
+  createdAt  DateTime @default(now())
+}
+
+// §8.3 Escalades
+model TicketEscalation {
+  id          String   @id @default(cuid())
+  ticketId    String
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromUserId  String?
+  fromUser    User?    @relation("EscalationFrom", fields: [fromUserId], references: [id])
+  toUserId    String?
+  toUser      User?    @relation("EscalationTo", fields: [toUserId], references: [id])
+  fromLevel   Role?
+  toLevel     Role
+  reason      String   @db.Text
+  isAuto      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+// Journal d'évolution du ticket (§8.2)
+model TicketHistory {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actorId   String?
+  field     String
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+// §9 Notifications in-app
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ticketId  String?
+  ticket    Ticket?  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel @default(IN_APP)
+  title     String
+  body      String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}
+
+// §8.2 (10) Enquête de satisfaction
+model SatisfactionSurvey {
+  id        String   @id @default(cuid())
+  ticketId  String   @unique
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  rating    Int      // 1..5
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+}
+
+// §13.4 Audit log (actions sensibles)
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  action    String
+  entity    String?
+  entityId  String?
+  metadata  Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entity, entityId])
+}
+
+// JWT refresh tokens (§13.1)
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Compteur séquentiel pour numérotation des tickets (TKT-YYYYMM-NNNNN)
+model TicketCounter {
+  id       String @id // ex. "202605"
+  current  Int    @default(0)
+}
+
+// Réclamation déposée par le technicien quand il déclare un ticket "non résolu"
+// Visible par les admins qui peuvent réviser et marquer traitée.
+model Complaint {
+  id           String   @id @default(cuid())
+  ticketId     String
+  ticket       Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  technicianId String
+  technician   User     @relation("ComplaintTech", fields: [technicianId], references: [id])
+  description  String   @db.Text
+  status       String   @default("PENDING")  // PENDING / REVIEWED
+  reviewNote   String?  @db.Text
+  reviewedAt   DateTime?
+  reviewedBy   String?
+  images       ComplaintImage[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
+  @@index([ticketId])
+}
+
+model ComplaintImage {
+  id          String    @id @default(cuid())
+  complaintId String
+  complaint   Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  filename    String
+  mimetype    String
+  size        Int
+  createdAt   DateTime  @default(now())
+}
+
+// Rapport d'intervention rédigé par le technicien à la clôture du ticket.
+// Obligatoire pour passer un ticket en DONE — quel que soit le résultat (résolu ou non).
+// Un seul rapport par ticket (unique ticketId).
+model InterventionReport {
+  id           String   @id @default(cuid())
+  ticketId     String   @unique
+  ticket       Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  technicianId String
+  technician   User     @relation("ReportTech", fields: [technicianId], references: [id])
+  description  String   @db.Text
+  files        InterventionReportFile[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([technicianId])
+  @@index([createdAt])
+}
+
+model InterventionReportFile {
+  id        String   @id @default(cuid())
+  reportId  String
+  report    InterventionReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  filename  String
+  mimetype  String
+  size      Int
+  createdAt DateTime @default(now())
+}
