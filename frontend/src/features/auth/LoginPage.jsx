@@ -139,42 +139,7 @@ export default function LoginPage() {
           </div>
 
           {/* Section compte démo - séparée par bord */}
-          <div className="border-t border-border bg-muted/30 px-7 py-4">
-            <button
-              type="button"
-              onClick={() => setShowDemo(!showDemo)}
-              className="flex items-center justify-between w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <span className="flex items-center gap-2">
-                <Icon glyph={Icons.info} size="xs" />
-                <span>Première connexion ? Voir le compte initial</span>
-              </span>
-              <Icon glyph={showDemo ? Icons.chevronUp : Icons.chevronDown} size="xs" />
-            </button>
-            {showDemo && (
-              <div className="mt-3 bg-card border border-border rounded-lg p-3 animate-slide-in">
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold mb-2">Administrateur par défaut</div>
-                <div className="space-y-1 font-mono text-xs text-foreground">
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground w-16">Email</span>
-                    <span>admin@gtsr.local</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground w-16">Password</span>
-                    <span>Admin@123</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={fillDemo}
-                  className="mt-3 w-full text-xs font-medium text-primary hover:text-primary/80 transition-colors flex items-center justify-center gap-1"
-                >
-                  Remplir le formulaire
-                  <Icon glyph={Icons.chevronRight} size="xs" />
-                </button>
-              </div>
-            )}
-          </div>
+  
         </div>
 
         {/* Footer */}
